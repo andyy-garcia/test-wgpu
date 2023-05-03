@@ -1,3 +1,4 @@
+use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -16,6 +17,10 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     render_pipeline2: wgpu::RenderPipeline,
     switch_pipeline: bool,
+    uniform_buffer: wgpu::Buffer,
+    mouse_pos: [f32; 4],
+    mouse_pos_need_update: bool,
+    bind_group: wgpu::BindGroup
 }
 
 impl State {
@@ -81,6 +86,38 @@ impl State {
             a: 1.0,
         };
 
+        let mouse_pos = [0.0, 0.0, 0.0, 0.0] as [f32; 4];
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::cast_slice(&mouse_pos),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("bind_group_layout"),
+            });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+            label: Some("bind_group"),
+        });
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -93,7 +130,7 @@ impl State {
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -185,6 +222,10 @@ impl State {
             render_pipeline,
             render_pipeline2,
             switch_pipeline: false,
+            uniform_buffer,
+            mouse_pos,
+            mouse_pos_need_update: false,
+            bind_group,
         }
     }
 
@@ -206,8 +247,24 @@ impl State {
             WindowEvent::CursorMoved { position, .. } => {
                 self.clear_color.r = position.x / (self.size.width as f64);
                 self.clear_color.g = position.y / (self.size.height as f64);
+                self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
+                self.mouse_pos[1] = (position.y / (self.size.width as f64)) as f32;
                 true
             },
+            WindowEvent::MouseInput { 
+                state: ElementState::Pressed,
+                ..
+            } => {
+                self.mouse_pos[2] = 2.0;
+                false
+            },
+            WindowEvent::MouseInput { 
+                state: ElementState::Released,
+                .. 
+            } => {
+                self.mouse_pos[2] = 0.0;
+                false
+            }
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
@@ -227,7 +284,17 @@ impl State {
     }
 
     fn update(&mut self) {
+        if self.mouse_pos_need_update {
+            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.mouse_pos]));
+            println!("mouse need update: {} {}", self.mouse_pos[0], self.mouse_pos[1]);
 
+            if self.mouse_pos[2] < 1.0 {
+                self.mouse_pos_need_update = false
+            }
+        } else if self.mouse_pos[2] > 1.0 {
+            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.mouse_pos]));
+            self.mouse_pos_need_update = true
+        }
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -251,6 +318,7 @@ impl State {
         });
 
         render_pass.set_pipeline(if self.switch_pipeline { &self.render_pipeline } else { &self.render_pipeline2 });
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..3, 0..1);
 
         drop(render_pass);
