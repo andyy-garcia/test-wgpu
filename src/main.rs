@@ -86,7 +86,7 @@ impl State {
             a: 1.0,
         };
 
-        let mouse_pos = [0.0, 0.0, 0.0, 0.0] as [f32; 4];
+        let mouse_pos = [0.0, 0.0, 0.0, 0.0] as [f32; 4]; // [3] is to tell shader code whether we need to draw mouse circle or not. [4] is useless but WGPU requires buffer size to be power-of-2-aligned.
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
@@ -221,7 +221,7 @@ impl State {
             clear_color,
             render_pipeline,
             render_pipeline2,
-            switch_pipeline: false,
+            switch_pipeline: true,
             uniform_buffer,
             mouse_pos,
             mouse_pos_need_update: false,
@@ -284,24 +284,27 @@ impl State {
     }
 
     fn update(&mut self) {
-        let mouse_pressed = self.mouse_pos[2] > 1.0;
-        let must_update = self.mouse_pos_need_update || mouse_pressed;
+        // default pipeline does not need mouse updates
+        if self.switch_pipeline {
+            let mouse_pressed = self.mouse_pos[2] > 1.0;
+            let must_update = self.mouse_pos_need_update || mouse_pressed;
 
-        if must_update {
-            let mut mouse_pos = self.mouse_pos.clone();
-            mouse_pos[0] *= 2.0;
-            mouse_pos[0] -= 1.0;
-            mouse_pos[1] *= 2.0;
-            mouse_pos[1] -= 1.0;
-            mouse_pos[1] = -mouse_pos[1];
+            if must_update {
+                let mut mouse_pos = self.mouse_pos.clone();
+                mouse_pos[0] *= 2.0;
+                mouse_pos[0] -= 1.0;
+                mouse_pos[1] *= 2.0;
+                mouse_pos[1] -= 1.0;
+                mouse_pos[1] = -mouse_pos[1];
 
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[mouse_pos]));
-            println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
+                self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[mouse_pos]));
+                println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
 
-            if !self.mouse_pos_need_update {
-                self.mouse_pos_need_update = true;
-            } else if !mouse_pressed {
-                self.mouse_pos_need_update = false;
+                if !self.mouse_pos_need_update {
+                    self.mouse_pos_need_update = true;
+                } else if !mouse_pressed {
+                    self.mouse_pos_need_update = false;
+                }
             }
         }
     }
@@ -326,7 +329,7 @@ impl State {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(if self.switch_pipeline { &self.render_pipeline } else { &self.render_pipeline2 });
+        render_pass.set_pipeline(if self.switch_pipeline { &self.render_pipeline2 } else { &self.render_pipeline });
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..3, 0..1);
 
