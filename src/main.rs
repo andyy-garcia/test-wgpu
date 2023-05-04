@@ -248,7 +248,7 @@ impl State {
                 self.clear_color.r = position.x / (self.size.width as f64);
                 self.clear_color.g = position.y / (self.size.height as f64);
                 self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
-                self.mouse_pos[1] = (position.y / (self.size.width as f64)) as f32;
+                self.mouse_pos[1] = (position.y / (self.size.height as f64)) as f32;
                 true
             },
             WindowEvent::MouseInput { 
@@ -284,16 +284,25 @@ impl State {
     }
 
     fn update(&mut self) {
-        if self.mouse_pos_need_update {
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.mouse_pos]));
-            println!("mouse need update: {} {}", self.mouse_pos[0], self.mouse_pos[1]);
+        let mouse_pressed = self.mouse_pos[2] > 1.0;
+        let must_update = self.mouse_pos_need_update || mouse_pressed;
 
-            if self.mouse_pos[2] < 1.0 {
-                self.mouse_pos_need_update = false
+        if must_update {
+            let mut mouse_pos = self.mouse_pos.clone();
+            mouse_pos[0] *= 2.0;
+            mouse_pos[0] -= 1.0;
+            mouse_pos[1] *= 2.0;
+            mouse_pos[1] -= 1.0;
+            mouse_pos[1] = -mouse_pos[1];
+
+            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[mouse_pos]));
+            println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
+
+            if !self.mouse_pos_need_update {
+                self.mouse_pos_need_update = true;
+            } else if !mouse_pressed {
+                self.mouse_pos_need_update = false;
             }
-        } else if self.mouse_pos[2] > 1.0 {
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.mouse_pos]));
-            self.mouse_pos_need_update = true
         }
     }
 
