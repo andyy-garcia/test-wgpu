@@ -35,6 +35,11 @@ fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
 }
 
+fn ycoord_to_norm(f: f32) -> f32 {
+    // scale [-1; 1] to [0; 1]
+    return (f + 1.0) / 2.0;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(in.vert_pos.x, in.vert_pos.y, 1.0, 1.0);
@@ -59,7 +64,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         col = mix(col, vec3<f32>(1.0, 1.0, 0.0), 1.0 - smoothstep(0.0, 0.005, length(p - m) - 0.015));
     }
 
-    if (u32(f32(global.viewport_height) * in.vert_pos.y) & 1u) == 0u {
+    if (u32(f32(global.viewport_height) * ycoord_to_norm(in.vert_pos.y)) & 1u) == 1u {
         col.x *= 2.0;
         col.y /= 2.0;
     }
