@@ -1,4 +1,4 @@
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -18,9 +18,46 @@ struct State {
     render_pipeline2: wgpu::RenderPipeline,
     switch_pipeline: bool,
     uniform_buffer: wgpu::Buffer,
-    mouse_pos: [f32; 4],
+    mouse_pos: [f32; 6],
     mouse_pos_need_update: bool,
     bind_group: wgpu::BindGroup
+}
+
+fn fallback_select_presentmode(supported_modes: &Vec<wgpu::PresentMode>, desired_modes: &Vec<wgpu::PresentMode>) -> Option::<wgpu::PresentMode> {
+    let mut desired_modes_iter = desired_modes.into_iter();
+    let mut selected_mode  = Option::<wgpu::PresentMode>::None;
+
+    loop {
+        selected_mode = desired_modes_iter.next().copied();
+
+        if let Some(x) = selected_mode {
+            // for i in supported_modes {
+            //     println!("{} (selected: {})", *i as i32, x as i32);
+            // }
+            if supported_modes.iter().position(|&mode| mode == x) == None {
+                selected_mode = None;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    selected_mode
+}
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::core::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::core::mem::size_of::<T>(),
+    )
+}
+
+struct MyUniform {
+    mouse_pos: [f32; 6],
+    width: u32,
+    height: u32,
 }
 
 impl State {
@@ -72,7 +109,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: fallback_select_presentmode(&surface_caps.present_modes, &vec![wgpu::PresentMode::Mailbox, wgpu::PresentMode::AutoVsync]).unwrap(),
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -86,11 +123,13 @@ impl State {
             a: 1.0,
         };
 
-        let mouse_pos = [0.0, 0.0, 0.0, 0.0] as [f32; 4]; // [3] is to tell shader code whether we need to draw mouse circle or not. [4] is useless but WGPU requires buffer size to be power-of-2-aligned.
+        let mouse_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as [f32; 6]; // [3] is to tell shader code whether we need to draw mouse circle or not. The rest is useless but WGPU requires buffer size to be power-of-2-aligned.
+
+        let uniform_data = MyUniform { mouse_pos, width: size.width, height: size.height };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
-            contents: bytemuck::cast_slice(&mouse_pos),
+            contents: unsafe { any_as_u8_slice(&uniform_data) },
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -143,7 +182,7 @@ impl State {
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader, // "shader" get deleted at the end of this function, while render_pipeline lives in the State structure, idk why there is not rust error here, the reference seems not to live long enough
+                module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -245,10 +284,14 @@ impl State {
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                self.clear_color.r = position.x / (self.size.width as f64);
-                self.clear_color.g = position.y / (self.size.height as f64);
-                self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
-                self.mouse_pos[1] = (position.y / (self.size.height as f64)) as f32;
+                if !self.switch_pipeline {
+                    self.clear_color.r = position.x / (self.size.width as f64);
+                    self.clear_color.g = position.y / (self.size.height as f64);
+                } else {
+                    self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
+                    self.mouse_pos[1] = (position.y / (self.size.height as f64)) as f32;
+                }
+
                 true
             },
             WindowEvent::MouseInput { 
@@ -290,6 +333,7 @@ impl State {
             let must_update = self.mouse_pos_need_update || mouse_pressed;
 
             if must_update {
+                // mouse position data is [0; 1] but shader use the [-1; 1] format (with Y being 1 at top and -1 at bottom).
                 let mut mouse_pos = self.mouse_pos.clone();
                 mouse_pos[0] *= 2.0;
                 mouse_pos[0] -= 1.0;
@@ -297,8 +341,16 @@ impl State {
                 mouse_pos[1] -= 1.0;
                 mouse_pos[1] = -mouse_pos[1];
 
-                self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[mouse_pos]));
-                println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
+                let uniform_data = MyUniform {
+                    mouse_pos: mouse_pos,
+                    height: self.size.height,
+                    width: self.size.width,
+                };
+
+                println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
+
+                self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
+                //println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
 
                 if !self.mouse_pos_need_update {
                     self.mouse_pos_need_update = true;
@@ -379,8 +431,11 @@ async fn run() {
             }
             Event::RedrawRequested(window_id) if window_id == state.window().id() => {
                 state.update();
+                let start = std::time::Instant::now();
                 match state.render() {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        println!("render time: {} ms", start.elapsed().as_nanos() as f32 / 1000000f32);
+                    }
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit

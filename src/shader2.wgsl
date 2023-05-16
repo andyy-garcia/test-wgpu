@@ -1,8 +1,14 @@
-struct MouseUniform {
+struct GlobalUniform {
     mouse_pos: vec3<f32>,
+    padding1: u32,
+    padding2: u32,
+    padding3: u32,
+    viewport_width: u32,
+    viewport_height: u32,
 };
+
 @group(0) @binding(0)
-var<uniform> mouse: MouseUniform;
+var<uniform> global: GlobalUniform;
 
 // Vertex shader
 
@@ -33,7 +39,8 @@ fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(in.vert_pos.x, in.vert_pos.y, 1.0, 1.0);
     let p = in.vert_pos.xy * 2.0;
-    let m = mouse.mouse_pos.xy * 2.0;
+    let m = global.mouse_pos.xy * 2.0;
+
     var d = sd_circle(p, 0.5);
 
     var col = vec3<f32>(0.9, 0.6, 0.3);
@@ -44,12 +51,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     col *= 1.0 - exp(-6.0 * abs(d));
     col *= 0.8 + 0.2*cos(150.0*d);
-	col = mix(col, vec3<f32>(1.0), 1.0 - smoothstep(0.0, 0.01, abs(d)));
+    col = mix(col, vec3<f32>(1.0), 1.0 - smoothstep(0.0, 0.01, abs(d)));
 
-    if mouse.mouse_pos.z > 1.0 {
+    if global.mouse_pos.z > 1.0 {
         d = sd_circle(m, 0.5);
         col = mix(col, vec3<f32>(1.0, 1.0, 0.0), 1.0 - smoothstep(0.0, 0.005, abs(length(p - m) - abs(d)) - 0.0025));
         col = mix(col, vec3<f32>(1.0, 1.0, 0.0), 1.0 - smoothstep(0.0, 0.005, length(p - m) - 0.015));
+    }
+
+    if (u32(f32(global.viewport_height) * in.vert_pos.y) & 1u) == 0u {
+        col.x *= 2.0;
+        col.y /= 2.0;
     }
 
     return vec4<f32>(col, 1.0);
