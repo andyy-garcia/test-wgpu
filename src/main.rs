@@ -109,7 +109,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: fallback_select_presentmode(&surface_caps.present_modes, &vec![wgpu::PresentMode::Mailbox, wgpu::PresentMode::AutoVsync]).unwrap(),
+            present_mode: fallback_select_presentmode(&surface_caps.present_modes, &vec![wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo]).unwrap(),
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -347,10 +347,9 @@ impl State {
                     width: self.size.width,
                 };
 
-                println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
+                // println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
 
                 self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
-                //println!("mouse update: {} {}", mouse_pos[0], mouse_pos[1]);
 
                 if !self.mouse_pos_need_update {
                     self.mouse_pos_need_update = true;
@@ -434,7 +433,8 @@ async fn run() {
                 let start = std::time::Instant::now();
                 match state.render() {
                     Ok(_) => {
-                        println!("render time: {} ms", start.elapsed().as_nanos() as f32 / 1000000f32);
+                        let render_time = start.elapsed().as_nanos() as f32 / 1000000f32;
+                        println!("frame render time: {} ms, fps: {}", render_time, 1000.0 / render_time);
                     }
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),

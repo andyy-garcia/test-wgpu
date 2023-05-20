@@ -43,6 +43,10 @@ fn ycoord_to_norm(f: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(in.vert_pos.x, in.vert_pos.y, 1.0, 1.0);
+    // if (u32(f32(global.viewport_height) * ycoord_to_norm(in.vert_pos.y)) & 1u) == 1u {
+    //     return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    // }
+
     let p = in.vert_pos.xy * 2.0;
     let m = global.mouse_pos.xy * 2.0;
 
@@ -64,9 +68,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         col = mix(col, vec3<f32>(1.0, 1.0, 0.0), 1.0 - smoothstep(0.0, 0.005, length(p - m) - 0.015));
     }
 
-    if (u32(f32(global.viewport_height) * ycoord_to_norm(in.vert_pos.y)) & 1u) == 1u {
-        col.x *= 2.0;
-        col.y /= 2.0;
+    if (u32(f32(global.viewport_height) * ycoord_to_norm(in.vert_pos.y)) % 4u > 1u) {
+        col.r /= 2.0;
+        col.g /= 2.0;
+        col.b /= 2.0;
+        // col = vec3<f32>(0.0);
     }
 
     return vec4<f32>(col, 1.0);
