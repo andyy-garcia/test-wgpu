@@ -18,7 +18,8 @@ struct State {
     render_pipeline2: wgpu::RenderPipeline,
     switch_pipeline: bool,
     uniform_buffer: wgpu::Buffer,
-    mouse_pos: [f32; 6],
+    mouse_pos: [f32; 3],
+    frame_number: u64,
     mouse_pos_need_update: bool,
     bind_group: wgpu::BindGroup
 }
@@ -55,7 +56,8 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 }
 
 struct MyUniform {
-    mouse_pos: [f32; 6],
+    mouse_pos: [f32; 4],
+    frame_number: u64,
     width: u32,
     height: u32,
 }
@@ -123,9 +125,9 @@ impl State {
             a: 1.0,
         };
 
-        let mouse_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as [f32; 6]; // [3] is to tell shader code whether we need to draw mouse circle or not. The rest is useless but WGPU requires buffer size to be power-of-2-aligned.
+        let mouse_pos = [0.0, 0.0, 0.0, 0.0]; // [3] is to tell shader code whether we need to draw mouse circle or not. The rest is useless but WGPU requires buffer size to be power-of-2-aligned.
 
-        let uniform_data = MyUniform { mouse_pos, width: size.width, height: size.height };
+        let uniform_data = MyUniform { mouse_pos, frame_number: 0, width: size.width, height: size.height };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
@@ -262,7 +264,8 @@ impl State {
             render_pipeline2,
             switch_pipeline: true,
             uniform_buffer,
-            mouse_pos,
+            frame_number: 0,
+            mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2]],
             mouse_pos_need_update: false,
             bind_group,
         }
@@ -342,7 +345,8 @@ impl State {
                 mouse_pos[1] = -mouse_pos[1];
 
                 let uniform_data = MyUniform {
-                    mouse_pos: mouse_pos,
+                    mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2], 0.0],
+                    frame_number: self.frame_number,
                     height: self.size.height,
                     width: self.size.width,
                 };
@@ -350,6 +354,7 @@ impl State {
                 // println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
 
                 self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
+                self.frame_number = self.frame_number + 1;
 
                 if !self.mouse_pos_need_update {
                     self.mouse_pos_need_update = true;
@@ -383,6 +388,9 @@ impl State {
         render_pass.set_pipeline(if self.switch_pipeline { &self.render_pipeline2 } else { &self.render_pipeline });
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..3, 0..1);
+
+        // TODO:
+        // For proper interlaced rendering (to reduce GPU usage), I must render to a framebuffer at half resolution, and use the rendered image as a texture to mix with the new frame and make up a full frame at full resolution
 
         drop(render_pass);
     
