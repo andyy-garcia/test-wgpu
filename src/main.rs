@@ -16,12 +16,12 @@ struct State {
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
     render_pipeline2: wgpu::RenderPipeline,
-    switch_pipeline: bool,
     uniform_buffer: wgpu::Buffer,
     mouse_pos: [f32; 3],
     frame_number: u64,
     mouse_pos_need_update: bool,
-    bind_group: wgpu::BindGroup
+    bind_group: wgpu::BindGroup,
+    render_texture_view: wgpu::TextureView,
 }
 
 fn fallback_select_presentmode(supported_modes: &Vec<wgpu::PresentMode>, desired_modes: &Vec<wgpu::PresentMode>) -> Option::<wgpu::PresentMode> {
@@ -46,6 +46,59 @@ fn fallback_select_presentmode(supported_modes: &Vec<wgpu::PresentMode>, desired
     }
 
     selected_mode
+}
+
+fn create_flat_texture(device: &wgpu::Device, width: u32, height: u32, usage: wgpu::TextureUsages) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        size: wgpu::Extent3d { width: width, height: height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: usage,
+        label: None,
+        view_formats: &[]
+    })
+}
+
+pub fn create_simple_render_pipeline(pipeline_layout: &wgpu::PipelineLayout, device: &wgpu::Device, shader_module: &wgpu::ShaderModule, target: wgpu::TextureFormat) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: shader_module,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader_module,
+            entry_point: "fs_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+            polygon_mode: wgpu::PolygonMode::Fill,
+            // Requires Features::DEPTH_CLIP_CONTROL
+            unclipped_depth: false,
+            // Requires Features::CONSERVATIVE_RASTERIZATION
+            conservative: false,
+        },
+        depth_stencil: None, // 1.
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    })
 }
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
@@ -161,11 +214,6 @@ impl State {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-        });
-
-        let shader2 = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader2.wgsl").into()),
         });
 
@@ -175,82 +223,13 @@ impl State {
             push_constant_ranges: &[],
         });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: None, // 1.
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
+        let render_pipeline = create_simple_render_pipeline(&render_pipeline_layout, &device, &shader, config.format);
+        let render_pipeline2 = create_simple_render_pipeline(&render_pipeline_layout, &device, &shader, wgpu::TextureFormat::Rgba8Unorm);
 
-        let render_pipeline2 = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader2,
-                entry_point: "vs_main",
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader2,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: None, // 1.
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
+        // For render-to-texture:
+        // We use RENDER_ATTACHMENT to allow rendering to this texture, and STORAGE_BINDING to allow reading it in another render pass (we can use TEXTURE_BINDING if we need a sampler)
+        let render_texture = create_flat_texture(&device, size.width / 2, size.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::STORAGE_BINDING);
+        let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
             window,
@@ -262,12 +241,12 @@ impl State {
             clear_color,
             render_pipeline,
             render_pipeline2,
-            switch_pipeline: true,
             uniform_buffer,
             frame_number: 0,
             mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2]],
             mouse_pos_need_update: false,
             bind_group,
+            render_texture_view: render_view,
         }
     }
 
@@ -287,13 +266,8 @@ impl State {
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                if !self.switch_pipeline {
-                    self.clear_color.r = position.x / (self.size.width as f64);
-                    self.clear_color.g = position.y / (self.size.height as f64);
-                } else {
-                    self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
-                    self.mouse_pos[1] = (position.y / (self.size.height as f64)) as f32;
-                }
+                self.mouse_pos[0] = (position.x / (self.size.width as f64)) as f32;
+                self.mouse_pos[1] = (position.y / (self.size.height as f64)) as f32;
 
                 true
             },
@@ -311,18 +285,6 @@ impl State {
                 self.mouse_pos[2] = 0.0;
                 false
             }
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Space),
-                        ..
-                    },
-                ..
-            } => {
-                self.switch_pipeline = !self.switch_pipeline;
-                true
-            }
             _ => {
                 false
             }
@@ -330,74 +292,75 @@ impl State {
     }
 
     fn update(&mut self) {
-        // default pipeline does not need mouse updates
-        if self.switch_pipeline {
-            let mouse_pressed = self.mouse_pos[2] > 1.0;
-            let must_update = self.mouse_pos_need_update || mouse_pressed;
+        let mouse_pressed = self.mouse_pos[2] > 1.0;
+        let must_update = self.mouse_pos_need_update || mouse_pressed;
 
-            if must_update {
-                // mouse position data is [0; 1] but shader use the [-1; 1] format (with Y being 1 at top and -1 at bottom).
-                let mut mouse_pos = self.mouse_pos.clone();
-                mouse_pos[0] *= 2.0;
-                mouse_pos[0] -= 1.0;
-                mouse_pos[1] *= 2.0;
-                mouse_pos[1] -= 1.0;
-                mouse_pos[1] = -mouse_pos[1];
+        if must_update {
+            // mouse position data is [0; 1] but shader use the [-1; 1] format (with Y being 1 at top and -1 at bottom).
+            let mut mouse_pos = self.mouse_pos.clone();
+            mouse_pos[0] *= 2.0;
+            mouse_pos[0] -= 1.0;
+            mouse_pos[1] *= 2.0;
+            mouse_pos[1] -= 1.0;
+            mouse_pos[1] = -mouse_pos[1];
 
-                let uniform_data = MyUniform {
-                    mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2], 0.0],
-                    frame_number: self.frame_number,
-                    height: self.size.height,
-                    width: self.size.width,
-                };
+            let uniform_data = MyUniform {
+                mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2], 0.0],
+                frame_number: self.frame_number,
+                height: self.size.height,
+                width: self.size.width,
+            };
 
-                // println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
+            // println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
 
-                self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
-                self.frame_number = self.frame_number + 1;
+            self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
+            self.frame_number = self.frame_number + 1;
 
-                if !self.mouse_pos_need_update {
-                    self.mouse_pos_need_update = true;
-                } else if !mouse_pressed {
-                    self.mouse_pos_need_update = false;
-                }
+            if !self.mouse_pos_need_update {
+                self.mouse_pos_need_update = true;
+            } else if !mouse_pressed {
+                self.mouse_pos_need_update = false;
             }
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    fn render_to_texture(&self, view: &wgpu::TextureView, pipeline: &wgpu::RenderPipeline) {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
 
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(self.clear_color),
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
-        });
-
-        render_pass.set_pipeline(if self.switch_pipeline { &self.render_pipeline2 } else { &self.render_pipeline });
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
-
-        // TODO:
-        // For proper interlaced rendering (to reduce GPU usage), I must render to a framebuffer at half resolution, and use the rendered image as a texture to mix with the new frame and make up a full frame at full resolution
-
-        drop(render_pass);
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
     
-        // submit will accept anything that implements IntoIter
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+    
         self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        // Step 1: offscreen rendering to a texture
+        self.render_to_texture(&self.render_texture_view, &self.render_pipeline2);
+
+        // Step 2: render on screen[, using the previously rendered texture as input in shader. => not done yet]
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.render_to_texture(&view, &self.render_pipeline);
+        
         output.present();
-    
         Ok(())
     }    
 }
@@ -417,15 +380,7 @@ async fn run() {
                 window_id,
             } if window_id == state.window.id() => if !state.input(event) {
                 match event {
-                    WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
                     }
@@ -438,6 +393,7 @@ async fn run() {
             }
             Event::RedrawRequested(window_id) if window_id == state.window().id() => {
                 state.update();
+
                 let start = std::time::Instant::now();
                 match state.render() {
                     Ok(_) => {
