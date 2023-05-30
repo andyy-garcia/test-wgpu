@@ -1,4 +1,6 @@
-use wgpu::{util::DeviceExt};
+use std::rc::Rc;
+
+use wgpu::{util::DeviceExt, ShaderStages};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -6,106 +8,23 @@ use winit::{
     window::Window,
 };
 
+use test_wgpu::utils::InterlacedRendererState;
+
 struct State {
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    device: Rc<wgpu::Device>,
+    queue: Rc<wgpu::Queue>,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
-    render_pipeline2: wgpu::RenderPipeline,
+    interlaced_renderer: InterlacedRendererState,
     uniform_buffer: wgpu::Buffer,
     mouse_pos: [f32; 3],
     frame_number: u64,
     mouse_pos_need_update: bool,
     bind_group: wgpu::BindGroup,
-    render_texture_view: wgpu::TextureView,
-}
-
-fn fallback_select_presentmode(supported_modes: &Vec<wgpu::PresentMode>, desired_modes: &Vec<wgpu::PresentMode>) -> Option::<wgpu::PresentMode> {
-    let mut desired_modes_iter = desired_modes.into_iter();
-    let mut selected_mode  = Option::<wgpu::PresentMode>::None;
-
-    loop {
-        selected_mode = desired_modes_iter.next().copied();
-
-        if let Some(x) = selected_mode {
-            // for i in supported_modes {
-            //     println!("{} (selected: {})", *i as i32, x as i32);
-            // }
-            if supported_modes.iter().position(|&mode| mode == x) == None {
-                selected_mode = None;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    selected_mode
-}
-
-fn create_flat_texture(device: &wgpu::Device, width: u32, height: u32, usage: wgpu::TextureUsages) -> wgpu::Texture {
-    device.create_texture(&wgpu::TextureDescriptor {
-        size: wgpu::Extent3d { width: width, height: height, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: usage,
-        label: None,
-        view_formats: &[]
-    })
-}
-
-pub fn create_simple_render_pipeline(pipeline_layout: &wgpu::PipelineLayout, device: &wgpu::Device, shader_module: &wgpu::ShaderModule, target: wgpu::TextureFormat) -> wgpu::RenderPipeline {
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Render Pipeline"),
-        layout: Some(pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: shader_module,
-            entry_point: "vs_main",
-            buffers: &[],
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: shader_module,
-            entry_point: "fs_main",
-            targets: &[Some(wgpu::ColorTargetState {
-                format: target,
-                blend: Some(wgpu::BlendState::REPLACE),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-            polygon_mode: wgpu::PolygonMode::Fill,
-            // Requires Features::DEPTH_CLIP_CONTROL
-            unclipped_depth: false,
-            // Requires Features::CONSERVATIVE_RASTERIZATION
-            conservative: false,
-        },
-        depth_stencil: None, // 1.
-        multisample: wgpu::MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-    })
-}
-
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::core::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::core::mem::size_of::<T>(),
-    )
 }
 
 struct MyUniform {
@@ -164,7 +83,7 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: fallback_select_presentmode(&surface_caps.present_modes, &vec![wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo]).unwrap(),
+            present_mode: test_wgpu::utils::select_prefered_presentmode(&surface_caps.present_modes, &vec![wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo]).unwrap(),
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -184,24 +103,15 @@ impl State {
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
-            contents: unsafe { any_as_u8_slice(&uniform_data) },
+            contents: unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) },
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("bind_group_layout"),
-            });
+        let bind_group_layout = test_wgpu::utils::create_bind_group_layout(&device, Some("bind_group_layout"), vec![wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        }], wgpu::ShaderStages::FRAGMENT);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
@@ -209,44 +119,41 @@ impl State {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),
             }],
-            label: Some("bind_group"),
+            label: Some("uniform_bind_group"),
         });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader2.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
         });
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout], // the final pass uses the texture as input to produce the on-screen image with some transform
             push_constant_ranges: &[],
         });
 
-        let render_pipeline = create_simple_render_pipeline(&render_pipeline_layout, &device, &shader, config.format);
-        let render_pipeline2 = create_simple_render_pipeline(&render_pipeline_layout, &device, &shader, wgpu::TextureFormat::Rgba8Unorm);
+        let render_pipeline = test_wgpu::utils::create_render_pipeline(&device, None, &[], &render_pipeline_layout, &shader, wgpu::TextureFormat::Rgba8Unorm);
 
-        // For render-to-texture:
-        // We use RENDER_ATTACHMENT to allow rendering to this texture, and STORAGE_BINDING to allow reading it in another render pass (we can use TEXTURE_BINDING if we need a sampler)
-        let render_texture = create_flat_texture(&device, size.width / 2, size.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::STORAGE_BINDING);
-        let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let device_rc = Rc::new(device);
+        let queue_rc = Rc::new(queue);
+        let interlaced_renderer = test_wgpu::utils::InterlacedRendererState::new(device_rc.clone(), queue_rc.clone(), size.width, size.height, config.format, include_str!("shaders/merge.wgsl"));
 
         Self {
             window,
             surface,
-            device,
-            queue,
+            device: device_rc,
+            queue: queue_rc,
             config,
             size,
             clear_color,
             render_pipeline,
-            render_pipeline2,
+            interlaced_renderer,
             uniform_buffer,
             frame_number: 0,
             mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2]],
             mouse_pos_need_update: false,
             bind_group,
-            render_texture_view: render_view,
         }
     }
 
@@ -260,6 +167,7 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+            self.interlaced_renderer.resize(new_size.width, new_size.height);
         }
     }
 
@@ -311,10 +219,7 @@ impl State {
                 width: self.size.width,
             };
 
-            // println!("{:?}", unsafe { &any_as_u8_slice(&uniform_data) });
-
-            self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { &any_as_u8_slice(&uniform_data) });
-            self.frame_number = self.frame_number + 1;
+            self.queue.as_ref().write_buffer(&self.uniform_buffer, 0, unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) });
 
             if !self.mouse_pos_need_update {
                 self.mouse_pos_need_update = true;
@@ -322,9 +227,11 @@ impl State {
                 self.mouse_pos_need_update = false;
             }
         }
+
+        self.frame_number += 1;
     }
 
-    fn render_to_texture(&self, view: &wgpu::TextureView, pipeline: &wgpu::RenderPipeline) {
+    fn render_to_texture(&self, view: &wgpu::TextureView) {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
@@ -343,24 +250,27 @@ impl State {
                 depth_stencil_attachment: None,
             });
     
-            render_pass.set_pipeline(pipeline);
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
     
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.queue.as_ref().submit(std::iter::once(encoder.finish()));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        // Step 1: offscreen rendering to a texture
-        self.render_to_texture(&self.render_texture_view, &self.render_pipeline2);
+        // Step 1: render a half frame
+        let render_texture = self.interlaced_renderer.get_internal_texture();
+        let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.render_to_texture(&render_view);
 
-        // Step 2: render on screen[, using the previously rendered texture as input in shader. => not done yet]
+        // Step 2: render a full frame by using the last rendered frame combined with the previous frame saved internally by the interlaced renderer. That means the very first frame will be half black.
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.render_to_texture(&view, &self.render_pipeline);
-        
+        self.interlaced_renderer.draw(&view);
+
         output.present();
+        
         Ok(())
     }    
 }
