@@ -47,14 +47,21 @@ var input_texture1: texture_2d<f32>;
 @group(0) @binding(2)
 var input_texture2: texture_2d<f32>;
 
+@group(0) @binding(3)
+var texture_sampler: sampler;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let x = u32(f32(global.width) * coord_to_norm(in.vert_pos.x));
     let y = u32(f32(global.height) * -coord_to_norm(in.vert_pos.y));
 
     if ((y & 1u) == 0u) {
-        return textureLoad(input_texture1, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
+        // return textureLoad(input_texture2, vec2<i32>(2, 0), 0);
+        return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(1.0, 0.0), 1.0);
+        // return textureSampleLevel(input_texture1, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), -coord_to_norm(in.vert_pos.y)), 1.0);
+        // return textureLoad(input_texture1, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
     } else {
-        return textureLoad(input_texture2, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
+        return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), -coord_to_norm(in.vert_pos.y)), 1.0);
+        // return textureLoad(input_texture2, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
     }
 }

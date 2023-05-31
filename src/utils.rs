@@ -56,20 +56,61 @@ impl InterlacedRendererState {
                     view_dimension: wgpu::TextureViewDimension::D2,
                     sample_type: wgpu::TextureSampleType::Float { filterable: true }
                 },
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             ], 
         wgpu::ShaderStages::FRAGMENT);
 
         // For ender to texture, we use RENDER_ATTACHMENT to allow rendering to this texture, and TEXTURE_BINDING to allow reading it in another pass
-        let render_texture1 = create_texture(device.as_ref(), None, width / 2, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
-        let render_texture2 = create_texture(device.as_ref(), None, width / 2, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
+        let render_texture1 = create_texture(device.as_ref(), Some("Interlaced renderer first render texture"), width / 2, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        let render_texture2 = create_texture(device.as_ref(), Some("Interlaced renderer second render texture"), width / 2, height / 2, /*wgpu::TextureUsages::RENDER_ATTACHMENT |*/ wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         let render_view1 = render_texture1.create_view(&wgpu::TextureViewDescriptor::default());
         let render_view2 = render_texture2.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let texture_test_data: &[u8] = &[255, 255, 203, 255, 54, 128, 57, 255];
+
+        let texture_size = wgpu::Extent3d {
+            width: 2,
+            height: 1,
+            depth_or_array_layers: 1,
+        };
+
+        queue.write_texture(
+            // Tells wgpu where to copy the pixel data
+            wgpu::ImageCopyTexture {
+                texture: &render_texture2,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            // The actual pixel data
+            &texture_test_data,
+            // The layout of the texture
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * 2),
+                rows_per_image: std::num::NonZeroU32::new(1),
+            },
+            texture_size,
+        );
+
+        let sampler = device.create_sampler(
+            &wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::Repeat,
+                address_mode_v: wgpu::AddressMode::Repeat,
+                address_mode_w: wgpu::AddressMode::Repeat,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            }
+        );
 
         let bind_group = create_bind_group(&device, Some("Interlaced renderer bind group"), &bind_group_layout, 
             vec![
                 uniform_buffer.as_entire_binding(),
                 wgpu::BindingResource::TextureView(&render_view1),
                 wgpu::BindingResource::TextureView(&render_view2),
+                wgpu::BindingResource::Sampler(&sampler),
             ],
         );
 
@@ -117,8 +158,8 @@ impl InterlacedRendererState {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.render_texture1 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
-        self.render_texture2 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
+        self.render_texture1 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        self.render_texture2 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         self.need_write_data = true;
     }
 
@@ -133,7 +174,8 @@ impl InterlacedRendererState {
     }
 
     pub fn get_internal_texture(&self) -> &wgpu::Texture {
-        if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
+        // if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
+        &self.render_texture1
     }
 
     /// Returns the command buffer necessary to render a full frame (by interlacing new frame with the old one) to a given texture.
