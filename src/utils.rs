@@ -14,7 +14,6 @@ pub struct InterlacedRendererState {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
-    uniform_data: UniformData,
     need_write_data: bool,
     frame_number: u64,
     index_buffer: wgpu::Buffer,
@@ -150,7 +149,6 @@ impl InterlacedRendererState {
             pipeline,
             bind_group,
             uniform_buffer,
-            uniform_data,
             need_write_data: false,
             frame_number: 0,
             index_buffer,
@@ -158,6 +156,8 @@ impl InterlacedRendererState {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
         self.render_texture1 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         self.render_texture2 = create_texture(self.device.as_ref(), None, self.width / 2, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         self.need_write_data = true;
@@ -166,7 +166,7 @@ impl InterlacedRendererState {
     /// Send necessary data to the GPU
     pub fn write_needed_data(&mut self) {
         if self.need_write_data {
-            self.queue.as_ref().write_buffer(&self.uniform_buffer, 0, unsafe { any_as_u8_slice(&self.uniform_data) });
+            self.queue.as_ref().write_buffer(&self.uniform_buffer, 0, unsafe { any_as_u8_slice(&UniformData { width: self.width, height: self.height }) });
             self.need_write_data = false;
         }
 
@@ -174,8 +174,7 @@ impl InterlacedRendererState {
     }
 
     pub fn get_internal_texture(&self) -> &wgpu::Texture {
-        // if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
-        &self.render_texture1
+        if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
     }
 
     /// Returns the command buffer necessary to render a full frame (by interlacing new frame with the old one) to a given texture.
