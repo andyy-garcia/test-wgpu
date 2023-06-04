@@ -309,8 +309,8 @@ async fn run() {
                 let start = std::time::Instant::now();
                 match state.render() {
                     Ok(_) => {
-                        let render_time = start.elapsed().as_nanos() as f32 / 1000000f32;
-                        println!("frame render time: {} ms, fps: {}", render_time, 1000.0 / render_time);
+                        // let render_time = start.elapsed().as_nanos() as f32 / 1000000f32;
+                        // println!("frame render time: {} ms, fps: {}", render_time, 1000.0 / render_time);
                     }
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
