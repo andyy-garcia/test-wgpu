@@ -40,8 +40,8 @@ impl InterlacedRendererState {
         });
 
         // For ender to texture, we use RENDER_ATTACHMENT to allow rendering to this texture, and TEXTURE_BINDING to allow reading it in another pass
-        let render_texture1 = create_texture(device.as_ref(), Some("Interlaced renderer first render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
-        let render_texture2 = create_texture(device.as_ref(), Some("Interlaced renderer second render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        let render_texture1 = create_texture(device.as_ref(), Some("Interlaced renderer first render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
+        let render_texture2 = create_texture(device.as_ref(), Some("Interlaced renderer second render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
         let render_view1 = render_texture1.create_view(&wgpu::TextureViewDescriptor::default());
         let render_view2 = render_texture2.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -134,8 +134,8 @@ impl InterlacedRendererState {
         println!("interlaced renderer resize to {}x{}", width, height);
         self.width = width;
         self.height = height;
-        self.render_texture1 = create_texture(self.device.as_ref(), None, self.width, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
-        self.render_texture2 = create_texture(self.device.as_ref(), None, self.width, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        self.render_texture1 = create_texture(self.device.as_ref(), None, self.width, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
+        self.render_texture2 = create_texture(self.device.as_ref(), None, self.width, self.height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
         self.need_write_data = true;
     }
 

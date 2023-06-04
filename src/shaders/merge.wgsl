@@ -55,11 +55,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let x = u32(f32(global.width) * coord_to_norm(in.vert_pos.x));
     let y = u32(f32(global.height) * coord_to_norm(-in.vert_pos.y));
 
-    if ((y & 1u) == 0u) {
-        return textureLoad(input_texture1, vec2<i32>(i32(x), i32(y / 2u)), 0);
+    var col1 = textureLoad(input_texture1, vec2<i32>(i32(x / 1u), i32(y / 2u)), 0);
+    var col2 = textureLoad(input_texture2, vec2<i32>(i32(x / 1u), i32(y / 2u)), 0);
+
+    var col = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+
+    if ((x & 1u) == 0u) {
+        col = col1;
         // return textureSampleLevel(input_texture1, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), coord_to_norm(-in.vert_pos.y)), 1.0);
     } else {
-        return textureLoad(input_texture2, vec2<i32>(i32(x), i32(y / 2u)), 0);
+        col = col2;
         // return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), coord_to_norm(-in.vert_pos.y)), 1.0);
     }
+
+    return col;
 }
