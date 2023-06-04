@@ -45,31 +45,6 @@ impl InterlacedRendererState {
         let render_view1 = render_texture1.create_view(&wgpu::TextureViewDescriptor::default());
         let render_view2 = render_texture2.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut texture_test_data: &[u8] = &[255, 255, 203, 255, 54, 128, 57, 255];
-
-        queue.write_texture(
-            // Tells wgpu where to copy the pixel data
-            wgpu::ImageCopyTexture {
-                texture: &render_texture1,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            // The actual pixel data
-            &texture_test_data,
-            // The layout of the texture
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * 2),
-                rows_per_image: std::num::NonZeroU32::new(1),
-            },
-            wgpu::Extent3d {
-                width: 2,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-        );
-
         // let sampler = device.create_sampler(
         //     &wgpu::SamplerDescriptor {
         //         address_mode_u: wgpu::AddressMode::Repeat,
@@ -111,33 +86,6 @@ impl InterlacedRendererState {
                 // wgpu::BindingResource::Sampler(&sampler),
             ],
         );
-
-        texture_test_data = &[255, 0, 0, 255, 199, 170, 0, 255];
-
-        queue.write_texture(
-            // Tells wgpu where to copy the pixel data
-            wgpu::ImageCopyTexture {
-                texture: &render_texture2,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            // The actual pixel data
-            &texture_test_data,
-            // The layout of the texture
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * 2),
-                rows_per_image: std::num::NonZeroU32::new(1),
-            },
-            wgpu::Extent3d {
-                width: 2,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        println!("write first texture");
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Interlaced renderer shader"),
@@ -195,8 +143,6 @@ impl InterlacedRendererState {
     pub fn write_needed_data(&mut self) {
         if self.need_write_data {
             self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { any_as_u8_slice(&UniformData { width: self.width, height: self.height }) });
-            println!("we write a texture");
-            let texture_test_data: &[u8] = &[0, 0, 0, 0, 0, 0, 0, 0];
 
             self.bind_group = create_bind_group(&self.device, Some("Interlaced renderer bind group"), &self.bind_group_layout, 
                 vec![
@@ -207,57 +153,12 @@ impl InterlacedRendererState {
                 ],
             );
 
-            self.queue.write_texture(
-                // Tells wgpu where to copy the pixel data
-                wgpu::ImageCopyTexture {
-                    texture: &self.render_texture1,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                // The actual pixel data
-                &texture_test_data,
-                // The layout of the texture
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * 2),
-                    rows_per_image: std::num::NonZeroU32::new(1),
-                },
-                wgpu::Extent3d {
-                    width: 2,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-            );
-            self.queue.write_texture(
-                // Tells wgpu where to copy the pixel data
-                wgpu::ImageCopyTexture {
-                    texture: &self.render_texture2,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                // The actual pixel data
-                &texture_test_data,
-                // The layout of the texture
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * 2),
-                    rows_per_image: std::num::NonZeroU32::new(1),
-                },
-                wgpu::Extent3d {
-                    width: 2,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-            );
             self.need_write_data = false;
         }
     }
 
     pub fn get_internal_texture(&self) -> &wgpu::Texture {
-        // if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
-        &self.render_texture1
+        if (self.frame_number & 1) == 0 { &self.render_texture1 } else { &self.render_texture2 }
     }
 
     /// Returns the command buffer necessary to render a full frame (by interlacing new frame with the old one) to a given texture.
