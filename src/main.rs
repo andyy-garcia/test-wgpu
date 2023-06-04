@@ -219,7 +219,7 @@ impl State {
                 width: self.size.width,
             };
 
-            self.queue.as_ref().write_buffer(&self.uniform_buffer, 0, unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) });
+            self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) });
 
             if !self.mouse_pos_need_update {
                 self.mouse_pos_need_update = true;
@@ -255,7 +255,7 @@ impl State {
             render_pass.draw(0..3, 0..1);
         }
     
-        self.queue.as_ref().submit(std::iter::once(encoder.finish()));
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -263,8 +263,6 @@ impl State {
         let render_texture = self.interlaced_renderer.get_internal_texture();
         let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.render_to_texture(&render_view);
-
-        self.device.poll(wgpu::Maintain::Wait);
 
         // Step 2: render a full frame by using the last rendered frame combined with the previous frame saved internally by the interlaced renderer. That means the very first frame will be half black.
         let output = self.surface.get_current_texture()?;
