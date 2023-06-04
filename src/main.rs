@@ -264,6 +264,8 @@ impl State {
         let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.render_to_texture(&render_view);
 
+        self.device.poll(wgpu::Maintain::Wait);
+
         // Step 2: render a full frame by using the last rendered frame combined with the previous frame saved internally by the interlaced renderer. That means the very first frame will be half black.
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
