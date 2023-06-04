@@ -57,11 +57,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if ((y & 1u) == 0u) {
         // return textureLoad(input_texture2, vec2<i32>(2, 0), 0);
-        return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(0.0025, 0.0), 1.0);
+        return textureSampleLevel(input_texture1, texture_sampler, vec2<f32>(0.0025, 0.0), 1.0);
         // return textureSampleLevel(input_texture1, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), -coord_to_norm(in.vert_pos.y)), 1.0);
         // return textureLoad(input_texture1, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
     } else {
-        return vec4<f32>(vec3<f32>(0.0), 1.0);
+        return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(0.0025, 0.0), 1.0);
         // return textureSampleLevel(input_texture2, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), -coord_to_norm(in.vert_pos.y)), 1.0);
         // return textureLoad(input_texture2, vec2<i32>(i32(coord_to_norm(in.vert_pos.x)), i32(-coord_to_norm(in.vert_pos.y))), 1);
     }
