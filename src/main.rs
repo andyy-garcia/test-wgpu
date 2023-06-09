@@ -8,7 +8,7 @@ use winit::{
     window::Window,
 };
 
-use test_wgpu::utils::InterlacedRendererState;
+use test_wgpu::interlaced::InterlacedRendererState;
 
 struct State {
     surface: wgpu::Surface,
@@ -97,7 +97,7 @@ impl State {
             a: 1.0,
         };
 
-        let mouse_pos = [0.0, 0.0, 0.0, 0.0]; // [3] is to tell shader code whether we need to draw mouse circle or not. The rest is useless but WGPU requires buffer size to be power-of-2-aligned.
+        let mouse_pos = [0.0, 0.0, 0.0, 0.0]; // [3] is to tell shader code whether we need to draw mouse circle or not. The rest is useless but WGPU requires buffer size to be a power of 2.
 
         let uniform_data = MyUniform { mouse_pos, frame_number: 0, width: size.width, height: size.height };
 
@@ -137,7 +137,7 @@ impl State {
 
         let device_rc = Rc::new(device);
         let queue_rc = Rc::new(queue);
-        let interlaced_renderer = test_wgpu::utils::InterlacedRendererState::new(device_rc.clone(), queue_rc.clone(), size.width, size.height, config.format, include_str!("shaders/merge.wgsl"));
+        let interlaced_renderer = InterlacedRendererState::new(device_rc.clone(), queue_rc.clone(), size.width, size.height, config.format, include_str!("shaders/merge.wgsl"));
 
         Self {
             window,
@@ -260,7 +260,7 @@ impl State {
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // Step 1: render a half frame
-        let render_texture = self.interlaced_renderer.get_internal_texture();
+        let render_texture = self.interlaced_renderer.get_render_texture();
         let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.render_to_texture(&render_view);
 
