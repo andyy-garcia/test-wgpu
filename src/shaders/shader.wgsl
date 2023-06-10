@@ -45,7 +45,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let p = in.vert_pos.xy * a;
-    let m = global.mouse_pos.xy * 2.0;
+    let m = global.mouse_pos.xy * a;
 
     var d = sd_circle(p, 0.5);
 
