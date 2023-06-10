@@ -39,7 +39,12 @@ fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(in.vert_pos.x, in.vert_pos.y, 1.0, 1.0);
 
-    let p = in.vert_pos.xy * 2.0;
+    var a = 1.0;
+    if ((global.frame_number_low & 1u) == 0u) {
+        a = 2.0;
+    }
+
+    let p = in.vert_pos.xy * a;
     let m = global.mouse_pos.xy * 2.0;
 
     var d = sd_circle(p, 0.5);

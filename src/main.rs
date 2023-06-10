@@ -23,7 +23,6 @@ struct State {
     uniform_buffer: wgpu::Buffer,
     mouse_pos: [f32; 3],
     frame_number: u64,
-    mouse_pos_need_update: bool,
     bind_group: wgpu::BindGroup,
 }
 
@@ -152,7 +151,6 @@ impl State {
             uniform_buffer,
             frame_number: 0,
             mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2]],
-            mouse_pos_need_update: false,
             bind_group,
         }
     }
@@ -200,33 +198,22 @@ impl State {
     }
 
     fn update(&mut self) {
-        let mouse_pressed = self.mouse_pos[2] > 1.0;
-        let must_update = self.mouse_pos_need_update || mouse_pressed;
+        // mouse position data is [0; 1] but shader use the [-1; 1] format (with Y being 1 at top and -1 at bottom).
+        let mut mouse_pos = self.mouse_pos.clone();
+        mouse_pos[0] *= 2.0;
+        mouse_pos[0] -= 1.0;
+        mouse_pos[1] *= 2.0;
+        mouse_pos[1] -= 1.0;
+        mouse_pos[1] = -mouse_pos[1];
 
-        if must_update {
-            // mouse position data is [0; 1] but shader use the [-1; 1] format (with Y being 1 at top and -1 at bottom).
-            let mut mouse_pos = self.mouse_pos.clone();
-            mouse_pos[0] *= 2.0;
-            mouse_pos[0] -= 1.0;
-            mouse_pos[1] *= 2.0;
-            mouse_pos[1] -= 1.0;
-            mouse_pos[1] = -mouse_pos[1];
+        let uniform_data = MyUniform {
+            mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2], 0.0],
+            frame_number: self.frame_number,
+            height: self.size.height,
+            width: self.size.width,
+        };
 
-            let uniform_data = MyUniform {
-                mouse_pos: [mouse_pos[0], mouse_pos[1], mouse_pos[2], 0.0],
-                frame_number: self.frame_number,
-                height: self.size.height,
-                width: self.size.width,
-            };
-
-            self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) });
-
-            if !self.mouse_pos_need_update {
-                self.mouse_pos_need_update = true;
-            } else if !mouse_pressed {
-                self.mouse_pos_need_update = false;
-            }
-        }
+        self.queue.write_buffer(&self.uniform_buffer, 0, unsafe { test_wgpu::utils::any_as_u8_slice(&uniform_data) });
 
         self.frame_number += 1;
     }
