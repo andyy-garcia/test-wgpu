@@ -61,6 +61,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var col = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
     if ((y & 1u) == 0u) {
+    // if ((y % 20u) < 10u) {
         col = col1;
         // return textureSampleLevel(input_texture1, texture_sampler, vec2<f32>(coord_to_norm(in.vert_pos.x), coord_to_norm(-in.vert_pos.y)), 1.0);
     } else {

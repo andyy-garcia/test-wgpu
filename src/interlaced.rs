@@ -41,7 +41,7 @@ impl InterlacedRendererState {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        // For ender to texture, we use RENDER_ATTACHMENT to allow rendering to this texture, and TEXTURE_BINDING to allow reading it in another pass
+        // For render to texture, we use RENDER_ATTACHMENT to allow rendering to this texture, and TEXTURE_BINDING to allow reading it in another pass
         let render_texture1 = create_texture(device.as_ref(), Some("Interlaced renderer first render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
         let render_texture2 = create_texture(device.as_ref(), Some("Interlaced renderer second render texture"), width, height / 2, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
         let render_view1 = render_texture1.create_view(&wgpu::TextureViewDescriptor::default());

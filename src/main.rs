@@ -275,18 +275,22 @@ async fn run() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == state.window.id() => if !state.input(event) {
-                match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        state.resize(*physical_size);
+            } if window_id == state.window.id() => {
+                if !state.input(event) {
+                    match event {
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                        WindowEvent::Resized(physical_size) => {
+                            state.resize(*physical_size);
+                        }
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            // new_inner_size is &&mut so we have to dereference it twice
+                            state.resize(**new_inner_size);
+                        }
+                        _ => {}
                     }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        // new_inner_size is &&mut so we have to dereference it twice
-                        state.resize(**new_inner_size);
-                    }
-                    _ => {}
                 }
+
+                state.window().request_redraw();
             }
             Event::RedrawRequested(window_id) if window_id == state.window().id() => {
                 state.update();
@@ -294,8 +298,8 @@ async fn run() {
                 let start = std::time::Instant::now();
                 match state.render() {
                     Ok(_) => {
-                        // let render_time = start.elapsed().as_nanos() as f32 / 1000000f32;
-                        // println!("frame render time: {} ms, fps: {}", render_time, 1000.0 / render_time);
+                        let render_time = start.elapsed().as_nanos() as f32 / 1000000f32;
+                        println!("frame render time: {} ms, fps: {}", render_time, 1000.0 / render_time);
                     }
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
@@ -308,7 +312,7 @@ async fn run() {
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.
-                state.window().request_redraw();
+                // state.window().request_redraw();
             }
             _ => {}
         };
